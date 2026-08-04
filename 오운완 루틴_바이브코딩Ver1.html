@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>하루 운동 루틴 - 오운완</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6', // blue-500
+                        secondary: '#10b981', // emerald-500
+                        accent: '#f59e0b', // amber-500
+                        dark: '#1f2937',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .app-container {
+            max-width: 480px;
+            margin: 0 auto;
+            background-color: #f8fafc;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 체크박스 애니메이션 */
+        .todo-checkbox {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .todo-checkbox.checked {
+            background-color: #10b981;
+            border-color: #10b981;
+            transform: scale(1.1);
+        }
+        .todo-checkbox.checked i {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .todo-checkbox i {
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s ease;
+        }
+
+        /* 완료된 항목 흐리게 */
+        .card-completed {
+            opacity: 0.6;
+            background-color: #f1f5f9;
+        }
+
+        /* 스크롤바 숨기기 */
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+
+        /* 토스트 메시지 애니메이션 */
+        @keyframes slideUpFade {
+            0% { opacity: 0; transform: translate(-50%, 20px); }
+            10% { opacity: 1; transform: translate(-50%, 0); }
+            90% { opacity: 1; transform: translate(-50%, 0); }
+            100% { opacity: 0; transform: translate(-50%, -20px); }
+        }
+        .toast-animate {
+            animation: slideUpFade 3s ease-in-out forwards;
+        }
+
+        /* 진행중 펄스 효과 */
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .timer-active {
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container relative">
+    
+    <!-- 헤더 영역 -->
+    <header class="pt-8 pb-5 px-6 bg-white sticky top-0 z-30 border-b border-gray-100 rounded-b-3xl shadow-sm">
+        <div class="flex justify-between items-end mb-4">
+            <div>
+                <p class="text-sm text-gray-500 font-semibold" id="today-date">날짜 로딩중...</p>
+                <h1 class="text-2xl font-extrabold text-gray-800 tracking-tight mt-1">오늘의 루틴 <span class="text-2xl">🔥</span></h1>
+            </div>
+            <button onclick="resetRoutine()" class="w-10 h-10 rounded-full bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 transition flex justify-center items-center">
+                <i class="fas fa-undo-alt"></i>
+            </button>
+        </div>
+        
+        <!-- 루틴 시작 버튼 -->
+        <button onclick="startRoutinePlayer()" class="w-full py-4 mb-4 bg-primary hover:bg-blue-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2 transform active:scale-95">
+            <i class="fas fa-play"></i> 하루 루틴 시작
+        </button>
+
+        <!-- 진행률 바 -->
+        <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1.5 font-bold">
+                <span>루틴 달성률</span>
+                <span id="progress-text" class="text-primary">0%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div id="progress-bar" class="bg-gradient-to-r from-blue-400 to-primary h-3 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 운동 리스트 (To-Do) -->
+    <main class="flex-1 px-5 py-6 overflow-y-auto pb-32" id="routine-list">
+        <!-- JS로 렌더링 될 공간 -->
+    </main>
+
+    <!-- 하단 수동 휴식 타이머 (일반 체크 시 사용) -->
+    <div id="manual-rest-timer" class="fixed bottom-0 w-full max-w-[480px] bg-white border-t border-gray-200 p-4 transform translate-y-full transition-transform duration-300 z-40 rounded-t-3xl shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-xs text-gray-500 font-bold mb-1">휴식 타이머</p>
+                <div id="manual-timer-display" class="text-3xl font-extrabold text-gray-800 tabular-nums">00:30</div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="addManualTime(10)" class="px-3 py-2 bg-gray-100 rounded-xl text-sm font-semibold text-gray-600">+10초</button>
+                <button onclick="closeManualTimer()" class="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center text-lg hover:bg-red-100"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 루틴 플레이어 오버레이 (전체화면) -->
+    <div id="routine-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-95 z-50 hidden flex-col items-center justify-between py-12 px-6 text-white backdrop-blur-sm">
+        
+        <!-- 상단 헤더 -->
+        <div class="w-full flex justify-between items-center max-w-md mx-auto">
+            <span id="player-step" class="bg-gray-800 px-4 py-1.5 rounded-full text-sm font-bold text-gray-300 border border-gray-700">1 / 8</span>
+            <button onclick="closeRoutinePlayer()" class="text-gray-400 hover:text-white text-xl p-2"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- 메인 정보 영역 -->
+        <div class="flex flex-col items-center text-center max-w-md mx-auto w-full">
+            <div id="player-state-label" class="text-accent font-bold tracking-wider mb-2 text-sm uppercase">진행 중인 운동</div>
+            <h2 id="player-ex-name" class="text-4xl font-extrabold mb-3">푸시업</h2>
+            <p id="player-ex-reps" class="text-xl text-gray-300 font-medium mb-10 bg-gray-800 px-6 py-2 rounded-2xl">12회</p>
+            
+            <!-- 타이머 원형 UI -->
+            <div class="relative w-64 h-64 flex items-center justify-center bg-gray-800 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.3)] border-4 border-gray-700 mb-8 timer-active" id="player-timer-ring">
+                <div id="player-time-display" class="text-7xl font-extrabold tabular-nums tracking-tighter">00:40</div>
+            </div>
+
+            <p id="player-next-ex" class="text-gray-400 font-medium mt-2">다음: 윗몸일으키기</p>
+        </div>
+
+        <!-- 컨트롤 버튼 -->
+        <div class="w-full max-w-md mx-auto flex gap-4">
+            <button onclick="togglePlayerPause()" id="player-pause-btn" class="flex-1 py-4 bg-gray-800 hover:bg-gray-700 rounded-2xl font-bold text-lg transition-colors flex items-center justify-center gap-2">
+                <i class="fas fa-pause"></i> 일시정지
+            </button>
+            <button onclick="skipPlayerTimer()" id="player-skip-btn" class="flex-1 py-4 bg-primary hover:bg-blue-500 rounded-2xl font-bold text-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+                <i class="fas fa-check"></i> 완료 (스킵)
+            </button>
+        </div>
+    </div>
+
+    <!-- 토스트 메시지 -->
+    <div id="toast" class="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-3 font-semibold opacity-0 pointer-events-none">
+        <i class="fas fa-star text-yellow-400"></i>
+        <span id="toast-msg">최고예요! 완료!</span>
+    </div>
+
+</div>
+
+<script>
+    // --- 0. PWA 설정 (Service Worker & Manifest 단일 파일 내장) ---
+    function setupPWA() {
+        // SVG 아이콘 Base64 인코딩 (🏋️‍♂️)
+        const iconBase64 = "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7wn4+L77iP4oCN4pmC77iPPC90ZXh0Pjwvc3ZnPg==";
+        
+        const manifest = {
+            name: "하루 운동 루틴",
+            short_name: "오운완",
+            start_url: ".",
+            display: "standalone",
+            background_color: "#f8fafc",
+            theme_color: "#3b82f6",
+            icons: [{
+                src: `data:image/svg+xml;base64,${iconBase64}`,
+                sizes: "192x192",
+                type: "image/svg+xml"
+            }]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
+        document.head.insertAdjacentHTML('beforeend', `<link rel="manifest" href="${URL.createObjectURL(manifestBlob)}">`);
+
+        // 브라우저 보안 정책(blob URL 제한)으로 인해 단일 파일 내에서 Service Worker를 직접 등록하는 것은 차단됩니다.
+        // 콘솔 에러를 방지하기 위해 해당 부분을 주석 처리했습니다.
+        // PWA를 완벽하게 적용하려면 실제 서버에 별도의 'sw.js' 파일을 만들고 아래 코드를 주석 해제하여 사용하세요.
+        /*
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log('Service Worker 등록 완료'))
+                .catch(console.error);
+        }
+        */
+    }
+    setupPWA();
+
+    // --- 1. 데이터 관리 ---
+    // 요청하신 운동 리스트 (모두 1세트씩 To-Do 리스트 형태)
+    const DEFAULT_ROUTINE = [
+        { id: 1, name: "푸시업", reps: "12회", estTime: 40, completed: false },
+        { id: 2, name: "윗몸일으키기", reps: "25회", estTime: 60, completed: false },
+        { id: 3, name: "런지", reps: "다리당 10회", estTime: 60, completed: false },
+        { id: 4, name: "스쿼트", reps: "25회", estTime: 60, completed: false },
+        { id: 5, name: "점핑잭", reps: "50회", estTime: 60, completed: false },
+        { id: 6, name: "플랭크", reps: "30초", estTime: 30, completed: false },
+        { id: 7, name: "왼쪽 사이드플랭크", reps: "20초", estTime: 20, completed: false },
+        { id: 8, name: "오른쪽 사이드플랭크", reps: "20초", estTime: 20, completed: false }
+    ];
+
+    let exercises = JSON.parse(localStorage.getItem('workoutRoutineV2')) || DEFAULT_ROUTINE;
+    const DEFAULT_REST_TIME = 30; // 기본 휴식시간 30초
+
+    // --- 2. 오디오 효과음 (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playTone(freq, type, duration, vol=0.3, startTimeOffset=0) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startTimeOffset);
+        
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime + startTimeOffset);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + startTimeOffset + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + startTimeOffset);
+        osc.stop(audioCtx.currentTime + startTimeOffset + duration);
+    }
+
+    // 성공/축하 사운드 (체크 시) - 경쾌한 아르페지오
+    function playSuccessSound() {
+        playTone(523.25, 'sine', 0.2, 0.4, 0);    // C5
+        playTone(659.25, 'sine', 0.2, 0.4, 0.1);  // E5
+        playTone(783.99, 'sine', 0.4, 0.4, 0.2);  // G5
+        if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+    }
+
+    // 타이머 종료 비프음
+    function playBeepSound() {
+        playTone(800, 'square', 0.15, 0.2, 0);
+        playTone(800, 'square', 0.3, 0.2, 0.2);
+        if (navigator.vibrate) navigator.vibrate([150, 100, 300]);
+    }
+
+    // --- 3. UI 렌더링 및 공통 기능 ---
+    function init() {
+        const now = new Date();
+        document.getElementById('today-date').textContent = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+        renderRoutine();
+        updateProgress();
+    }
+
+    function renderRoutine() {
+        const container = document.getElementById('routine-list');
+        container.innerHTML = '';
+
+        exercises.forEach((ex, index) => {
+            const card = document.createElement('div');
+            // To-do 리스트 스타일의 카드
+            card.className = `bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer transition-all duration-300 hover:shadow-md ${ex.completed ? 'card-completed' : ''}`;
+            card.onclick = () => toggleExercise(ex.id);
+            
+            // 왼쪽 체크박스와 텍스트
+            const leftContent = `
+                <div class="flex items-center gap-4 flex-1">
+                    <div class="todo-checkbox w-7 h-7 rounded-full border-2 flex items-center justify-center text-white ${ex.completed ? 'checked' : 'border-gray-300'}">
+                        <i class="fas fa-check text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-lg ${ex.completed ? 'line-through text-gray-400' : ''}">${ex.name}</h3>
+                        <p class="text-sm text-gray-500 font-medium">${ex.reps}</p>
+                    </div>
+                </div>
+            `;
+            
+            // 오른쪽 예상시간 표시
+            const rightContent = `
+                <div class="text-right ml-2">
+                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
+                        <i class="far fa-clock"></i> ${formatTime(ex.estTime)}
+                    </span>
+                </div>
+            `;
+
+            card.innerHTML = leftContent + rightContent;
+            container.appendChild(card);
+        });
+    }
+
+    const toastMsgs = ["성취감 뿜뿜! 🔥", "최고예요! 🎉", "아주 잘하고 있어요! 💪", "멋집니다! 👏", "오운완을 향해! 🚀"];
+    
+    function showToast(exName) {
+        const toast = document.getElementById('toast');
+        const msg = toastMsgs[Math.floor(Math.random() * toastMsgs.length)];
+        document.getElementById('toast-msg').textContent = `${exName} 완료! ${msg}`;
+        
+        toast.classList.remove('toast-animate');
+        void toast.offsetWidth; // 리플로우 강제 (애니메이션 재시작)
+        toast.classList.add('toast-animate');
+    }
+
+    function toggleExercise(id) {
+        // 수동 모드 체크 처리
+        const ex = exercises.find(e => e.id === id);
+        if(!ex) return;
+
+        ex.completed = !ex.completed;
+        saveData();
+        renderRoutine();
+        updateProgress();
+
+        if (ex.completed) {
+            playSuccessSound();
+            showToast(ex.name);
+            startManualRestTimer(); // 체크 시 하단 휴식 타이머 표시
+        }
+    }
+
+    function updateProgress() {
+        const total = exercises.length;
+        const completed = exercises.filter(ex => ex.completed).length;
+        const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+        
+        document.getElementById('progress-bar').style.width = `${percentage}%`;
+        document.getElementById('progress-text').textContent = `${percentage}%`;
+
+        if(percentage === 100) {
+            setTimeout(() => {
+                playSuccessSound();
+                showToast("모든 루틴");
+                document.getElementById('toast-msg').textContent = "🎉 완벽해요! 오늘의 오운완 달성! 🎉";
+            }, 500);
+        }
+    }
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function saveData() {
+        localStorage.setItem('workoutRoutineV2', JSON.stringify(exercises));
+    }
+
+    function resetRoutine() {
+        showCustomConfirm("오늘의 진행 상황을 모두 초기화할까요?", () => {
+            exercises.forEach(ex => ex.completed = false);
+            saveData();
+            renderRoutine();
+            updateProgress();
+            closeManualTimer();
+        });
+    }
+
+    // 커스텀 컨펌 창 대용 (간단 구현)
+    function showCustomConfirm(msg, callback) {
+        if(confirm(msg)) callback();
+    }
+
+
+    // --- 4. 수동 하단 휴식 타이머 (개별 체크 시) ---
+    let manualTimerInterval;
+    let manualTimeLeft = 0;
+
+    function startManualRestTimer() {
+        // 이미 진행 중인 전체 루틴 플레이어가 있으면 무시
+        if (playerInterval) return; 
+        
+        clearInterval(manualTimerInterval);
+        manualTimeLeft = DEFAULT_REST_TIME;
+        
+        const panel = document.getElementById('manual-rest-timer');
+        panel.classList.remove('translate-y-full'); // 패널 올리기
+        updateManualTimerDisplay();
+
+        manualTimerInterval = setInterval(() => {
+            manualTimeLeft--;
+            updateManualTimerDisplay();
+            if (manualTimeLeft <= 0) {
+                clearInterval(manualTimerInterval);
+                playBeepSound();
+                closeManualTimer();
+            }
+        }, 1000);
+    }
+
+    function updateManualTimerDisplay() {
+        document.getElementById('manual-timer-display').textContent = formatTime(manualTimeLeft);
+    }
+
+    function addManualTime(sec) {
+        manualTimeLeft += sec;
+        updateManualTimerDisplay();
+    }
+
+    function closeManualTimer() {
+        clearInterval(manualTimerInterval);
+        document.getElementById('manual-rest-timer').classList.add('translate-y-full');
+    }
+
+
+    // --- 5. 🚀 자동 진행 루틴 플레이어 (Workout Mode) ---
+    let playerInterval = null;
+    let pTimeLeft = 0;
+    let pState = 'exercise'; // 'exercise' | 'rest'
+    let pCurrentIndex = 0;
+    let pIsPaused = false;
+
+    function startRoutinePlayer() {
+        // 아직 완료 안 된 첫 번째 운동 찾기
+        pCurrentIndex = exercises.findIndex(ex => !ex.completed);
+        
+        if (pCurrentIndex === -1) {
+            showToast("루틴");
+            document.getElementById('toast-msg').textContent = "이미 오늘의 루틴을 모두 완료했어요! 🎉";
+            return;
+        }
+
+        closeManualTimer(); // 수동 타이머 끄기
+        document.getElementById('routine-overlay').classList.remove('hidden');
+        document.getElementById('routine-overlay').classList.add('flex');
+        
+        startExerciseStep();
+    }
+
+    function closeRoutinePlayer() {
+        clearInterval(playerInterval);
+        playerInterval = null;
+        document.getElementById('routine-overlay').classList.add('hidden');
+        document.getElementById('routine-overlay').classList.remove('flex');
+        renderRoutine();
+    }
+
+    function startExerciseStep() {
+        if (pCurrentIndex >= exercises.length) {
+            closeRoutinePlayer();
+            updateProgress();
+            return;
+        }
+
+        pState = 'exercise';
+        pIsPaused = false;
+        const ex = exercises[pCurrentIndex];
+        pTimeLeft = ex.estTime;
+        
+        // UI 업데이트
+        document.getElementById('player-step').textContent = `${pCurrentIndex + 1} / ${exercises.length}`;
+        document.getElementById('player-state-label').textContent = "🏃 진행 중인 운동";
+        document.getElementById('player-state-label').className = "text-primary font-bold tracking-wider mb-2 text-sm uppercase";
+        document.getElementById('player-ex-name').textContent = ex.name;
+        document.getElementById('player-ex-reps').textContent = ex.reps;
+        
+        // 링 색상 파란색
+        const ring = document.getElementById('player-timer-ring');
+        ring.className = "relative w-64 h-64 flex items-center justify-center bg-gray-800 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.4)] border-4 border-primary mb-8 timer-active";
+        
+        // 버튼 텍스트
+        const skipBtn = document.getElementById('player-skip-btn');
+        skipBtn.innerHTML = '<i class="fas fa-check"></i> 완료 (스킵)';
+        skipBtn.className = "flex-1 py-4 bg-primary hover:bg-blue-500 rounded-2xl font-bold text-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2";
+
+        const nextEx = exercises[pCurrentIndex + 1];
+        document.getElementById('player-next-ex').textContent = nextEx ? `다음: ${nextEx.name}` : "다음: 루틴 종료!";
+        
+        updatePlayerPauseBtn();
+        runPlayerTimer();
+    }
+
+    function startRestStep() {
+        pState = 'rest';
+        pIsPaused = false;
+        pTimeLeft = DEFAULT_REST_TIME; // 30초 휴식
+        
+        const nextEx = exercises[pCurrentIndex]; // 이미 index는 증가됨
+        
+        // UI 업데이트
+        document.getElementById('player-state-label').textContent = "☕ 달콤한 휴식 시간";
+        document.getElementById('player-state-label').className = "text-secondary font-bold tracking-wider mb-2 text-sm uppercase";
+        document.getElementById('player-ex-name').textContent = "휴식";
+        document.getElementById('player-ex-reps').textContent = nextEx ? `다음: ${nextEx.name}` : "잠시 후 종료됩니다";
+        
+        // 링 색상 초록색
+        const ring = document.getElementById('player-timer-ring');
+        ring.className = "relative w-64 h-64 flex items-center justify-center bg-gray-800 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.4)] border-4 border-secondary mb-8 timer-active";
+        
+        // 버튼 텍스트
+        const skipBtn = document.getElementById('player-skip-btn');
+        skipBtn.innerHTML = '<i class="fas fa-forward"></i> 휴식 건너뛰기';
+        skipBtn.className = "flex-1 py-4 bg-secondary hover:bg-green-500 rounded-2xl font-bold text-lg transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2";
+        
+        document.getElementById('player-next-ex').textContent = "";
+        
+        updatePlayerPauseBtn();
+        runPlayerTimer();
+    }
+
+    function runPlayerTimer() {
+        clearInterval(playerInterval);
+        updatePlayerTimeDisplay();
+        
+        playerInterval = setInterval(() => {
+            if (!pIsPaused) {
+                pTimeLeft--;
+                updatePlayerTimeDisplay();
+                
+                if (pTimeLeft <= 0) {
+                    clearInterval(playerInterval);
+                    autoTransition();
+                }
+            }
+        }, 1000);
+    }
+
+    function autoTransition() {
+        if (pState === 'exercise') {
+            // 운동 완료 -> 휴식으로 전환
+            playSuccessSound();
+            const ex = exercises[pCurrentIndex];
+            ex.completed = true;
+            saveData();
+            updateProgress(); // 뒤쪽 UI 업데이트
+            showToast(ex.name);
+            
+            pCurrentIndex++;
+            if (pCurrentIndex < exercises.length) {
+                startRestStep();
+            } else {
+                // 모두 완료
+                closeRoutinePlayer();
+            }
+        } else {
+            // 휴식 완료 -> 다음 운동으로 전환
+            playBeepSound();
+            startExerciseStep();
+        }
+    }
+
+    function skipPlayerTimer() {
+        clearInterval(playerInterval);
+        autoTransition(); // 시간이 다 된 것과 동일하게 처리
+    }
+
+    function togglePlayerPause() {
+        pIsPaused = !pIsPaused;
+        updatePlayerPauseBtn();
+        const ring = document.getElementById('player-timer-ring');
+        if (pIsPaused) {
+            ring.classList.remove('timer-active');
+        } else {
+            ring.classList.add('timer-active');
+        }
+    }
+
+    function updatePlayerPauseBtn() {
+        const btn = document.getElementById('player-pause-btn');
+        if (pIsPaused) {
+            btn.innerHTML = '<i class="fas fa-play text-primary"></i> 계속하기';
+            btn.className = "flex-1 py-4 bg-gray-700 rounded-2xl font-bold text-lg transition-colors flex items-center justify-center gap-2 text-white border border-gray-600";
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i> 일시정지';
+            btn.className = "flex-1 py-4 bg-gray-800 hover:bg-gray-700 rounded-2xl font-bold text-lg transition-colors flex items-center justify-center gap-2 text-gray-300";
+        }
+    }
+
+    function updatePlayerTimeDisplay() {
+        document.getElementById('player-time-display').textContent = formatTime(pTimeLeft);
+    }
+
+    // 앱 실행
+    window.onload = init;
+
+</script>
+</body>
+</html>
